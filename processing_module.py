@@ -156,7 +156,7 @@ def plot_single_feature_metric(feature, metric, bins=12, fontsize=13, lw=2, cs=3
     # Plot results
     xvals = np.array(feature).flatten()
     yvals = np.array(metric).flatten()
-    hist = np.histogram2d(xvals, yvals, bins=bins, normed=True)
+    hist = np.histogram2d(xvals, yvals, bins=bins, density=True)
 
     # Plot y mean 
     slices = 0.5 * (np.array(hist[2][1:]) + np.array(hist[2][:-1]))

@@ -184,7 +184,80 @@ def adjacent_quadruplets_coefficient(sequence_list, amino_group, normalize=True)
 
     return res
 
+def gap_coefficient(sequence_list, amino_group):
+    '''
+    Params:
+        sequence_list : list
+            List containing the sequences to be analyzed.
+        amino_group : list
+            List containing the amino acids for which to
+            measure adjacency.
+    Output:
+        Returns a list of values, indicating the gap coefficient
+        from the given group in each input sequence.
+    '''
+    # Init results
+    res = []
+    mean_list = []
+    var_list = []
+    d_list = []
+    # Operate for each sequence
+    for s in sequence_list:
+        # Build binary vector
+        seq_vec = np.array(list(s))
+        v = 1*np.isin(seq_vec, amino_group)
+        v = np.diff(v) #v[i+1]-v[i]
+        s = 1*np.isin(v,-1) #1 if start, 0 if not
+        f = 1*np.isin(v, 1) #1 if finish, 0 if not
+        d = s-f
+        d_list.append(d)
+        mean_list.append(np.mean(d))
+        var_list.append(np.var(d))
+    return d_list, mean_list, var_list
 
+def block_distribution_metrics(sequence_list, amino_group):
+    '''
+    Output:
+        Returns a DataFrame where each row is a sequence and the columns
+        are the features of block and gap distribution.
+    '''
+    metrics_list = []
+    amino_array = np.array(amino_group)
+    
+    for s in sequence_list:
+        seq_vec = np.array(list(s))
+        
+        #Binary vector: 1 if in the group, 0 otherwise
+        v = np.isin(seq_vec, amino_array).astype(int)
+        
+        # Adding padding of zeros at the ends to correctly capture blocks that start at the first character or end at the last
+        padded_v = np.pad(v, (1, 1), mode='constant')
+        diffs = np.diff(padded_v)
+        
+        #Find the indices of starts and ends of blocks
+        starts = np.where(diffs == 1)[0]
+        ends = np.where(diffs == -1)[0]
+        
+        #1. Calculate the lengths of the blocks (distance between start and end indices)
+        block_lengths = ends - starts
+        
+        #2. Calculate the lengths of the internal gaps (distance between the end of one block and the start of the next)
+        if len(starts) > 1:
+            gap_lengths = starts[1:] - ends[:-1]
+        else:
+            gap_lengths = np.array([]) # Nessun gap interno se c'è 1 o 0 blocchi
+    
+        # Feauture dictionary for the current sequence
+        metrics = {
+            'num_blocks': len(block_lengths),
+            'mean_block_len': np.mean(block_lengths) if len(block_lengths) > 0 else 0.0,
+            'max_block_len': np.max(block_lengths) if len(block_lengths) > 0 else 0.0,
+            'mean_gap_len': np.mean(gap_lengths) if len(gap_lengths) > 0 else 0.0,
+            'max_gap_len': np.max(gap_lengths) if len(gap_lengths) > 0 else 0.0
+        }
+        metrics_list.append(metrics)
+        
+    return pd.DataFrame(metrics_list)
 
 # ----- OTHER ------
 # Typical grouping of the standard amino acids
