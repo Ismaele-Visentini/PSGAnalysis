@@ -217,9 +217,15 @@ def gap_coefficient(sequence_list, amino_group):
 
 def block_distribution_metrics(sequence_list, amino_group):
     '''
+     Params:
+        sequence_list : list
+            List containing the sequences to be analyzed.
+        amino_group : list
+            List containing the amino acids for which to
+            measure adjacency.
     Output:
         Returns a DataFrame where each row is a sequence and the columns
-        are the features of block and gap distribution.
+        are the features of block and gap distribution. (num blocks, mean block length, var block length, max block length, mean gap length, var gap length, max gap length)
     '''
     metrics_list = []
     amino_array = np.array(amino_group)
@@ -251,8 +257,10 @@ def block_distribution_metrics(sequence_list, amino_group):
         metrics = {
             'num_blocks': len(block_lengths),
             'mean_block_len': np.mean(block_lengths) if len(block_lengths) > 0 else 0.0,
+            'var_block_len': np.var(block_lengths) if len(block_lengths) > 0 else 0.0,
             'max_block_len': np.max(block_lengths) if len(block_lengths) > 0 else 0.0,
             'mean_gap_len': np.mean(gap_lengths) if len(gap_lengths) > 0 else 0.0,
+            'var_gap_len': np.var(gap_lengths) if len(gap_lengths) > 0 else 0.0,
             'max_gap_len': np.max(gap_lengths) if len(gap_lengths) > 0 else 0.0
         }
         metrics_list.append(metrics)
