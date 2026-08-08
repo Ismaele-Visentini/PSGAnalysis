@@ -1,9 +1,6 @@
 # Import modules
 import pandas as pd
 import numpy as np
-
-
-
 # ------ I/O FUNCTIONS -------
 
 
@@ -184,8 +181,9 @@ def adjacent_quadruplets_coefficient(sequence_list, amino_group, normalize=True)
 
     return res
 
+'''
 def gap_coefficient(sequence_list, amino_group):
-    '''
+    
     Params:
         sequence_list : list
             List containing the sequences to be analyzed.
@@ -195,7 +193,7 @@ def gap_coefficient(sequence_list, amino_group):
     Output:
         Returns a list of values, indicating the gap coefficient
         from the given group in each input sequence.
-    '''
+    
     # Init results
     res = []
     mean_list = []
@@ -213,7 +211,7 @@ def gap_coefficient(sequence_list, amino_group):
         d_list.append(d)
         mean_list.append(np.mean(d))
         var_list.append(np.var(d))
-    return d_list, mean_list, var_list
+    return d_list, mean_list, var_list'''
 
 def block_distribution_metrics(sequence_list, amino_group):
     '''
@@ -251,7 +249,7 @@ def block_distribution_metrics(sequence_list, amino_group):
         if len(starts) > 1:
             gap_lengths = starts[1:] - ends[:-1]
         else:
-            gap_lengths = np.array([]) # Nessun gap interno se c'è 1 o 0 blocchi
+            gap_lengths = np.array([]) # No internal gaps if there is 1 or 0 blocks
     
         # Feauture dictionary for the current sequence
         metrics = {
@@ -259,6 +257,7 @@ def block_distribution_metrics(sequence_list, amino_group):
             'mean_block_len': np.mean(block_lengths) if len(block_lengths) > 0 else 0.0,
             'var_block_len': np.var(block_lengths) if len(block_lengths) > 0 else 0.0,
             'max_block_len': np.max(block_lengths) if len(block_lengths) > 0 else 0.0,
+            'num_gaps': len(gap_lengths),
             'mean_gap_len': np.mean(gap_lengths) if len(gap_lengths) > 0 else 0.0,
             'var_gap_len': np.var(gap_lengths) if len(gap_lengths) > 0 else 0.0,
             'max_gap_len': np.max(gap_lengths) if len(gap_lengths) > 0 else 0.0
@@ -266,6 +265,110 @@ def block_distribution_metrics(sequence_list, amino_group):
         metrics_list.append(metrics)
         
     return pd.DataFrame(metrics_list)
+
+
+'''def interaction_map_coefficient(sequence_list, potential='MIYS960102'): #MIYS960102 #TANS760101
+    
+    Params:
+        sequence_list : list
+            List containing the sequences to be analyzed.
+        potential : str
+            The potential to be used for the interaction map from the aaindex database.
+    Output:
+        Returns a Dataframe in which each row is a sequence and the columns
+        are the matrix and the features of the LxL interaction map matrix. (Trace, Determinant, Sum, Min_Eigenvalues, Max_Eigenvalues)
+    
+    from aaindex import aaindex3
+
+    # Init results
+    metrics_list = []
+
+    record = aaindex3[potential]
+    matrix_data = record['matrix']
+
+    AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
+    aa_to_idx = {aa: i for i, aa in enumerate(AMINO_ACIDS)}
+    MJ_matrix = np.zeros((20, 20))
+    for i, aa1 in enumerate(AMINO_ACIDS):
+        for j, aa2 in enumerate(AMINO_ACIDS):
+            MJ_matrix[i, j] = matrix_data[aa1][aa2]
+
+    # Operate for each sequence
+    for s in sequence_list:
+        
+
+        def get_sequence_interaction_matrix(sequence, base_matrix):
+            """
+            Given a sequence of length L, returns an L x L matrix
+            containing the corresponding interaction values.
+            """
+
+            indices = [aa_to_idx[aa.upper()] for aa in sequence]
+            idx_array = np.array(indices)
+            
+            L_x_L_matrix = base_matrix[idx_array][:, idx_array]
+            return L_x_L_matrix
+
+        M = get_sequence_interaction_matrix(s, MJ_matrix)
+
+        metrics = {
+            #'Matrix': M,
+            'Trace': np.trace(M),
+            'Determinant': np.linalg.det(M),
+            'Sum': np.sum(M),
+            #'Eigenvalues': np.linalg.eigvals(M)
+            'Min_Eigenvalue': np.min(np.linalg.eigvals(M)),
+            'Max_Eigenvalue': np.max(np.linalg.eigvals(M))
+        }
+
+        metrics_list.append(metrics)
+
+    return pd.DataFrame(metrics_list)'''
+
+
+def KL_divergence_coefficient(sequence_list,amino_group):
+    """
+    Computes the KL divergence coefficient for a list of sequences based on the specified amino acid group.
+
+    Parameters:
+    sequence_list (list): A list of sequences (strings) to analyze.
+    amino_group (list): A list of amino acids representing the group of interest.
+
+    Returns:
+    res (list): A list of KL divergence coefficients for each sequence and amino acid group.
+    """
+    # Initialize counts
+    total_count = 0
+    group_count = 0
+
+    # Count occurrences of amino acids in the specified group
+    for s in sequence_list:
+        total_count += len(s)
+        group_count += sum(1 for aa in s if aa in amino_group)
+
+    # Calculate probabilities
+    p_group_total = group_count / total_count if total_count > 0 else 0
+    p_not_group_total = 1 - p_group_total
+    res = []
+
+    for s in sequence_list:
+        seq_count = len(s)
+        seq_group_count = sum(1 for aa in s if aa in amino_group)
+
+        # Calculate probabilities for the current sequence
+        p_group = seq_group_count / seq_count if seq_count > 0 else 0
+        p_not_group = 1 - p_group
+        # Calculate KL divergence coefficient for the current sequence
+        kl_divergence = 0
+        if p_group > 0:
+            kl_divergence += p_group * np.log2(p_group / (p_group_total))
+        if p_not_group > 0:
+            kl_divergence += p_not_group * np.log2(p_not_group / (p_not_group_total))
+
+        res.append(kl_divergence)
+
+
+    return res
 
 # ----- OTHER ------
 # Typical grouping of the standard amino acids
