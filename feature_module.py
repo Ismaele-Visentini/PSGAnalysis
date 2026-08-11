@@ -181,37 +181,6 @@ def adjacent_quadruplets_coefficient(sequence_list, amino_group, normalize=True)
 
     return res
 
-'''
-def gap_coefficient(sequence_list, amino_group):
-    
-    Params:
-        sequence_list : list
-            List containing the sequences to be analyzed.
-        amino_group : list
-            List containing the amino acids for which to
-            measure adjacency.
-    Output:
-        Returns a list of values, indicating the gap coefficient
-        from the given group in each input sequence.
-    
-    # Init results
-    res = []
-    mean_list = []
-    var_list = []
-    d_list = []
-    # Operate for each sequence
-    for s in sequence_list:
-        # Build binary vector
-        seq_vec = np.array(list(s))
-        v = 1*np.isin(seq_vec, amino_group)
-        v = np.diff(v) #v[i+1]-v[i]
-        s = 1*np.isin(v,-1) #1 if start, 0 if not
-        f = 1*np.isin(v, 1) #1 if finish, 0 if not
-        d = s-f
-        d_list.append(d)
-        mean_list.append(np.mean(d))
-        var_list.append(np.var(d))
-    return d_list, mean_list, var_list'''
 
 def block_distribution_metrics(sequence_list, amino_group):
     '''
@@ -253,14 +222,14 @@ def block_distribution_metrics(sequence_list, amino_group):
     
         # Feauture dictionary for the current sequence
         metrics = {
-            'num_blocks': len(block_lengths),
-            'mean_block_len': np.mean(block_lengths) if len(block_lengths) > 0 else 0.0,
-            'var_block_len': np.var(block_lengths) if len(block_lengths) > 0 else 0.0,
-            'max_block_len': np.max(block_lengths) if len(block_lengths) > 0 else 0.0,
-            'num_gaps': len(gap_lengths),
-            'mean_gap_len': np.mean(gap_lengths) if len(gap_lengths) > 0 else 0.0,
-            'var_gap_len': np.var(gap_lengths) if len(gap_lengths) > 0 else 0.0,
-            'max_gap_len': np.max(gap_lengths) if len(gap_lengths) > 0 else 0.0
+            'num_blocks': len(block_lengths), #number of blocks of amino acids from the group in the sequence
+            'mean_block_len': np.mean(block_lengths) if len(block_lengths) > 0 else 0.0, #mean length of blocks of amino acids from the group in the sequence
+            'var_block_len': np.var(block_lengths) if len(block_lengths) > 0 else 0.0, #variance of the length of blocks of amino acids from the group in the sequence
+            'max_block_len': np.max(block_lengths) if len(block_lengths) > 0 else 0.0, #maximum length of all the blocks of amino acids from the group in the sequence
+            'num_gaps': len(gap_lengths), #number of gaps between blocks of amino acids from the group in the sequence
+            'mean_gap_len': np.mean(gap_lengths) if len(gap_lengths) > 0 else 0.0, #mean length of gaps between blocks of amino acids from the group in the sequence
+            'var_gap_len': np.var(gap_lengths) if len(gap_lengths) > 0 else 0.0, #variance of the length of gaps between blocks of amino acids from the group in the sequence
+            'max_gap_len': np.max(gap_lengths) if len(gap_lengths) > 0 else 0.0 #maximum length of all the gaps between blocks of amino acids from the group in the sequence
         }
         metrics_list.append(metrics)
         
@@ -341,7 +310,7 @@ def KL_divergence_coefficient(sequence_list,amino_group):
     total_count = 0
     group_count = 0
 
-    # Count occurrences of amino acids in the specified group
+    # Count occurrences of amino acids in the specified group in all sequences
     for s in sequence_list:
         total_count += len(s)
         group_count += sum(1 for aa in s if aa in amino_group)
@@ -358,7 +327,7 @@ def KL_divergence_coefficient(sequence_list,amino_group):
         # Calculate probabilities for the current sequence
         p_group = seq_group_count / seq_count if seq_count > 0 else 0
         p_not_group = 1 - p_group
-        # Calculate KL divergence coefficient for the current sequence
+        # Calculate KL divergence coefficient for the current sequence wrt the total distribution
         kl_divergence = 0
         if p_group > 0:
             kl_divergence += p_group * np.log2(p_group / (p_group_total))
@@ -369,6 +338,55 @@ def KL_divergence_coefficient(sequence_list,amino_group):
 
 
     return res
+
+
+def signal_processing_metrics(sequence_list,amino_group1,amino_group2):
+    '''
+    Params:
+        sequence_list : list
+            List containing the sequences to be analyzed.
+        amino_group1 : list
+            List containing the amino acids of the first group.
+        amino_group2 : list
+            List containing the amino acids of the second group.
+    Output:
+        Returns a Dataframe in which each row is a sequence and the columns
+        are the features extracted from the signal processing analysis (lag_minus_one, lag_plus_one, max_xcorr, max_power_one, max_power_two).
+    '''
+    # Init results
+    res = []
+    
+    for s in sequence_list:
+        # Convert sequence to binary signal
+        seq_vec = np.array(list(s))
+        v = 1*np.isin(seq_vec, amino_group1)
+        w = 1*np.isin(seq_vec, amino_group2)
+
+        xcorr = np.correlate(v, w, mode='full')
+        xcenter = len(s) - 1
+
+        lag_minus_one = xcorr[xcenter - 1] if (xcenter - 1) >= 0 else 0
+        lag_plus_one = xcorr[xcenter + 1] if (xcenter + 1) < len(xcorr) else 0
+
+        max_xcorr = np.max(xcorr)
+        argmax_xcorr = np.argmax(xcorr)
+
+        max_power_one = np.max((np.abs(np.fft.fft(v))**2)[1:])  
+        max_power_two = np.max((np.abs(np.fft.fft(w))**2)[1:]) 
+
+        metrics = {
+            'lag_minus_one': lag_minus_one, # value of the cross-correlation at lag -1
+            'lag_plus_one': lag_plus_one, # value of the cross-correlation at lag +1
+            'max_xcorr': max_xcorr, # maximum value of the cross-correlation
+            'argmax_xcorr': argmax_xcorr, # delay at which the maximum cross-correlation occurs
+            'max_power_one': max_power_one, # maximum power of the first signal frequency (amino_group1)
+            'max_power_two': max_power_two # maximum power of the second signal frequency (amino_group2)
+        }
+        res.append(metrics)
+
+    return pd.DataFrame(res)
+
+
 
 # ----- OTHER ------
 # Typical grouping of the standard amino acids
