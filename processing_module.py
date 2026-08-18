@@ -2,6 +2,14 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.feature_selection import SequentialFeatureSelector
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import GradientBoostingRegressor
+import inspect
+import feature_module
+import itertools
+import textwrap
 
 
 # ------- DATA PROCESSING FUNCTIONS --------
@@ -322,3 +330,123 @@ def plot_partial_correlation_vs_cutoff(feature_1, feature_2, metric, cutoff_valu
 
     plt.tight_layout()
     plt.show();
+
+
+# Function to sort the features contained in the feature_module 
+# uses a forward greedy algorithm of SequentialFeatureSelector of scikit-learn
+def feature_dataset_sorter(
+        df : pd.DataFrame,
+        amino_group_list : list[list[str]],
+        relevant_number : int = 5,
+        function_filter_list : list[str] = ['composition','coefficient','metric']):
+    '''
+    Params:
+            df : DataFrame
+                Input DataFrame containing at least two columns:
+                'full_sequence' (str, amino acid sequences) and
+                'enrichment_score' (float, target values to predict).
+            amino_group_list : list of lists
+                List of amino acid groups (each a list of single-letter codes)
+                used to compute grouped features. Pairwise combinations of these
+                groups are also used for functions requiring two groups
+                (e.g. 'signal_processing_metrics').
+            relevant_number : int
+                Number of features to select via forward sequential feature
+                selection. Must not exceed the total number of features generated.
+            function_filter_list : list of strings, optional
+                Substrings used to select which functions in feature_module are
+                applied to the sequences (matched against function names).
+
+    Returns:
+            X_best : DataFrame
+                DataFrame containing the 'relevant_number' selected features plus
+                a 'score' column holding the original 'enrichment_score' values.
+    '''
+    #Original df containing the dataset
+    sequences = df['full_sequence'].values
+    metric = df['enrichment_score'].values
+
+    #Creation of an empty df and an empy list
+    X = pd.DataFrame() 
+    X_list = []
+
+    #Inspecting the feature_module
+    for function_name, function in inspect.getmembers(feature_module,inspect.isfunction):
+
+        if (function_name == 'signal_processing_metrics'):
+            for amino_group_1, amino_group_2 in itertools.combinations(amino_group_list, 2):
+                amino_group_name_1 = "".join(amino_group_1)
+                amino_group_name_2 = "".join(amino_group_2)
+                df_result = function(sequences,amino_group_1,amino_group_2)
+                if not isinstance(df_result, pd.DataFrame):
+                    df_result = pd.DataFrame(df_result)
+                df_result = df_result.add_prefix(f'{function_name}_{amino_group_name_1}_{amino_group_name_2}_')
+                X_list.append(df_result)
+
+        #Query of the feature_module based on the filter_list
+        elif any(name in function_name for name in function_filter_list):
+
+            #Looping through the amino_group_list to calculate the features for each amino group
+            for amino_group in amino_group_list:
+                
+                    #Calculate the feature for each sequence and store it in a df
+                    df_result = function(sequences,amino_group)
+                    if not isinstance(df_result, pd.DataFrame):
+                        df_result = pd.DataFrame(df_result)#, columns=[function_name])
+
+                    amino_group_name = "".join(amino_group)
+                    df_result = df_result.add_prefix(f'{function_name}_{amino_group_name}_')
+                    X_list.append(df_result)
+
+    #Concatenation of the list of df into a single df
+    if X_list:
+        X = pd.concat(X_list, axis=1)
+
+    #Warning in case there aren't enough features
+    if relevant_number > X.shape[1]:
+        raise ValueError(f"relevant_number={relevant_number} exceeds available features ({X.shape[1]})")
+
+    #Choosing the estimator to sort the feature
+    estimator = GradientBoostingRegressor(n_estimators=30)#LinearRegression()
+    sfs = SequentialFeatureSelector(estimator, n_features_to_select=relevant_number, direction='forward')
+    sfs.fit(X, metric)
+
+    best_features = sfs.get_feature_names_out()
+    X_best = X[best_features].copy()
+    X_best['score'] = metric
+
+    return X_best
+
+#Plots the relationship between selected features and the target score
+#returns None, saves an image called Best_plots.png
+def feature_dataset_plotter(
+        X_best : pd.DataFrame,
+        name : str = ''):
+    '''
+    Params:
+            X_best : DataFrame
+                DataFrame containing N selected feature columns and a 'score'
+                column, as returned by feature_dataset_sorter.
+            name : str
+                String to specify the name of the plot
+
+    Returns:
+            None
+                Saves an NxN grid of lower-triangular subplots to
+                name+'Best_plots.png'. The diagonal shows histograms of each feature;
+                off-diagonal subplots show pairwise 2D scatter plots between
+                features, colored by binned 'score' values.
+    '''
+
+    plot_X = X_best.copy()
+    plot_X.columns = ['\n'.join(textwrap.wrap(col, width=20)) for col in plot_X.columns]
+    score_bins = pd.qcut(plot_X['score'], q=5, duplicates='drop')
+    plot_X['score_bin'] = score_bins.astype(str)
+    sns.pairplot(
+        plot_X.drop(columns=['score']),
+        hue='score_bin',
+        palette='viridis',
+        corner=True
+    )
+    plt.tight_layout()
+    plt.savefig(name+"_Best_plots.png",dpi=400)
