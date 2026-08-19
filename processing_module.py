@@ -364,7 +364,7 @@ def feature_dataset_sorter(
     '''
     #Original df containing the dataset
     sequences = df['full_sequence'].values
-    metric = df['enrichment_score'].values
+    metric = np.array(df['enrichment_score'].values)
 
     #Creation of an empty df and an empy list
     X = pd.DataFrame() 
